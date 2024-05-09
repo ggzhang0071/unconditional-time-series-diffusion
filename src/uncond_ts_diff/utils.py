@@ -44,7 +44,7 @@ sns.set(
 )
 
 
-def filter_metrics(metrics, select={"ND", "NRMSE", "mean_wQuantileLoss"}):
+def filter_metrics(metrics, select={"ND", "NRMSE", "MAPE","mean_wQuantileLoss"}):
     return {m: metrics[m].item() for m in select}
 
 

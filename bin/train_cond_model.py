@@ -16,7 +16,8 @@ from gluonts.itertools import Cached
 from gluonts.torch.batchify import batchify
 from gluonts.evaluation import make_evaluation_predictions, Evaluator
 from gluonts.dataset.field_names import FieldName
-
+import sys
+sys.path.append("/git/unconditional-time-series-diffusion/src")
 import uncond_ts_diff.configs as diffusion_configs
 from uncond_ts_diff.dataset import get_gts_dataset
 from uncond_ts_diff.model import TSDiffCond
@@ -94,6 +95,8 @@ def evaluate_conditional(
     metrics, _ = evaluator(tss, forecasts)
     metrics = filter_metrics(metrics)
     results.append(dict(**metrics))
+    save_figname = f"real_forecasts_comparison_{config['dataset']}.jpg"
+    plot_forecasts(forecasts,tss,config['prediction_length'],save_figname)
 
     return results
 

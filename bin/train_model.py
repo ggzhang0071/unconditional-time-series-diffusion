@@ -16,7 +16,8 @@ from gluonts.itertools import Cached
 from gluonts.torch.batchify import batchify
 from gluonts.evaluation import make_evaluation_predictions, Evaluator
 from gluonts.dataset.field_names import FieldName
-
+import sys
+sys.path.append('/git/unconditional-time-series-diffusion/src')
 import uncond_ts_diff.configs as diffusion_configs
 from uncond_ts_diff.dataset import get_gts_dataset
 from uncond_ts_diff.model.callback import EvaluateCallback
@@ -29,6 +30,13 @@ from uncond_ts_diff.utils import (
     filter_metrics,
     MaskInput,
 )
+from gluonts.dataset.common import load_datasets
+import pathlib
+import os 
+from utils import plot_forecasts 
+from pytorch_lightning.loggers import TensorBoardLogger
+
+
 
 guidance_map = {"ddpm": DDPMGuidance, "ddim": DDIMGuidance}
 
@@ -116,6 +124,10 @@ def evaluate_guidance(
         metrics, _ = evaluator(tss, forecasts)
         metrics = filter_metrics(metrics)
         results.append(dict(**missing_data_kwargs, **metrics))
+        prediction_length=config['prediction_length']
+        save_figname = f"real_forecasts_comparison_{config['dataset']}_{prediction_length}.jpg"
+        plot_forecasts(forecasts,tss,prediction_length,save_figname)
+
 
     return results
 
@@ -132,7 +144,12 @@ def main(config, log_dir):
     model = create_model(config)
 
     # Setup dataset and data loading
-    dataset = get_gts_dataset(dataset_name)
+    #dataset = get_gts_dataset(dataset_name)
+    dataset_path = pathlib.Path(os.path.join("/git/datasets",dataset_name))
+    dataset = load_datasets(metadata=dataset_path,  
+    train=dataset_path / "train",
+        test=dataset_path / "test")
+
     assert dataset.metadata.freq == freq
     assert dataset.metadata.prediction_length == prediction_length
 
@@ -209,6 +226,7 @@ def main(config, log_dir):
     callbacks.append(checkpoint_callback)
     callbacks.append(RichProgressBar())
 
+    logger_1 = TensorBoardLogger("tb_logs", name=f"train_model_{config['dataset']}")
     trainer = pl.Trainer(
         accelerator="gpu" if torch.cuda.is_available() else None,
         devices=[int(config["device"].split(":")[-1])],
@@ -218,6 +236,8 @@ def main(config, log_dir):
         callbacks=callbacks,
         default_root_dir=log_dir,
         gradient_clip_val=config.get("gradient_clip_val", None),
+        logger=logger_1,
+        
     )
     logger.info(f"Logging to {trainer.logger.log_dir}")
     trainer.fit(model, train_dataloaders=data_loader)

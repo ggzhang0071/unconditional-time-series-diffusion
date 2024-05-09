@@ -9,7 +9,8 @@ import torch
 from tqdm.auto import tqdm
 from gluonts.dataset.field_names import FieldName
 from gluonts.evaluation import make_evaluation_predictions, Evaluator
-
+import sys
+sys.path.append('/git/unconditional-time-series-diffusion/src')
 from uncond_ts_diff.utils import (
     create_transforms,
     create_splitter,
@@ -25,6 +26,12 @@ from uncond_ts_diff.sampler import (
     DDIMGuidance,
 )
 import uncond_ts_diff.configs as diffusion_configs
+from gluonts.dataset.common import load_datasets
+import pathlib
+import os 
+from 
+
+
 
 guidance_map = {"ddpm": DDPMGuidance, "ddim": DDIMGuidance}
 
@@ -119,6 +126,8 @@ def evaluate_guidance(
         metrics, _ = evaluator(tss, forecasts)
         metrics = filter_metrics(metrics)
         results.append(dict(**missing_data_kwargs, **metrics))
+        save_figname = f"real_forecasts_comparison_{config['dataset']}.jpg"
+        plot_forecasts(forecasts,tss,config['prediction_length'],save_figname)
 
     return results
 
@@ -133,7 +142,11 @@ def main(config: dict, log_dir: str):
     # Load dataset and model
     logger.info("Loading model")
     model = load_model(config)
-    dataset = get_gts_dataset(dataset_name)
+    #dataset = get_gts_dataset(dataset_name)
+    dataset_path = pathlib.Path(os.path.join("/git/datasets",dataset_name))
+    dataset = load_datasets(metadata=dataset_path,  
+    train=dataset_path / "train",
+        test=dataset_path / "test")
     assert dataset.metadata.freq == freq
     assert dataset.metadata.prediction_length == prediction_length
 

@@ -16,6 +16,13 @@ from gluonts.evaluation import make_evaluation_predictions, Evaluator
 from gluonts.dataset.loader import TrainDataLoader
 from gluonts.itertools import Cached
 from gluonts.torch.batchify import batchify
+import pathlib
+from gluonts.dataset.common import load_datasets
+from utils import plot_forecasts
+import sys, os 
+sys.path.append("src")
+
+
 
 from uncond_ts_diff.utils import (
     create_transforms,
@@ -36,6 +43,8 @@ import uncond_ts_diff.configs as diffusion_configs
 
 guidance_map = {"ddpm": DDPMGuidance, "ddim": DDIMGuidance}
 refiner_map = {"most_likely": MostLikelyRefiner, "mcmc": MCMCRefiner}
+
+
 
 
 def load_model(config):
@@ -60,6 +69,12 @@ def load_model(config):
     return model
 
 
+import matplotlib.pyplot as plt
+
+
+
+
+
 def get_best_diffusion_step(model: TSDiff, data_loader, device):
     losses = np.zeros(model.timesteps)
     batch = {
@@ -80,29 +95,31 @@ def get_best_diffusion_step(model: TSDiff, data_loader, device):
 
 def train_and_forecast_base_model(dataset, base_model_name, config):
     base_model_kwargs = config.get("base_model_params", {})
+    prediction_length=dataset.metadata.prediction_length
+
     if base_model_name == "deepar":
         predictor = DeepAREstimator(
-            prediction_length=dataset.metadata.prediction_length,
+            prediction_length=prediction_length,
             freq=dataset.metadata.freq,
             **base_model_kwargs,
         ).train(list(dataset.train), cache_data=True)
     elif base_model_name == "transformer":
         predictor = TransformerEstimator(
-            prediction_length=dataset.metadata.prediction_length,
+            prediction_length=prediction_length,
             freq=dataset.metadata.freq,
             **base_model_kwargs,
         ).train(list(dataset.train), cache_data=True)
     elif base_model_name == "seasonal_naive":
         predictor = SeasonalNaivePredictor(
             freq=dataset.metadata.freq,
-            prediction_length=dataset.metadata.prediction_length,
+            prediction_length=prediction_length,
             **base_model_kwargs,
         )
     elif base_model_name == "linear":
         num_train_samples = 10000
         predictor = LinearEstimator(
             freq=dataset.metadata.freq,
-            prediction_length=dataset.metadata.prediction_length,
+            prediction_length=prediction_length,
             context_length=config["context_length"],
             num_train_samples=num_train_samples,
             **base_model_kwargs,
@@ -117,7 +134,6 @@ def train_and_forecast_base_model(dataset, base_model_name, config):
     )
     fcsts = list(tqdm(fcst_iter, total=len(dataset.test)))
     tss = list(ts_iter)
-
     return fcsts, tss
 
 
@@ -166,7 +182,11 @@ def main(config: dict, log_dir: str):
 
     # Load dataset and model
     logger.info("Loading model")
-    dataset = get_gts_dataset(dataset_name)
+    #dataset = get_gts_dataset(dataset_name)
+    dataset_path = pathlib.Path(os.path.join("/git/datasets",dataset_name))
+    dataset = load_datasets(metadata=dataset_path,  
+    train=dataset_path / "train",
+        test=dataset_path / "test")
     config["freq"] = dataset.metadata.freq
 
     assert prediction_length == dataset.metadata.prediction_length
@@ -224,10 +244,16 @@ def main(config: dict, log_dir: str):
             dataset, base_model_name, config
         )
 
+
+
+
+
     # Evaluate base forecasts
     evaluator = Evaluator()
     baseline_metrics, _ = evaluator(tss, base_fcsts)
     baseline_metrics = filter_metrics(baseline_metrics)
+    save_figname = f"real_forecasts_comparison_{config['dataset']}.jpg"
+    plot_forecasts(forecasts,tss,config['prediction_length'],save_figname)
 
     # Run refinement
     log_dir = Path(log_dir) / "refinement_logs"
@@ -297,6 +323,8 @@ def main(config: dict, log_dir: str):
             default_flow_style=False,
             sort_keys=False,
         )
+
+
 
 
 if __name__ == "__main__":
